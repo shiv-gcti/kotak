@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const http = require('http');
+const path = require('path');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
@@ -20,9 +21,15 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(morgan('combined'));
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5000'],
+  methods: ['GET', 'POST'],
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve frontend static files from the frontend directory
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Store io instance for use in routes
 app.set('io', io);
@@ -35,6 +42,14 @@ app.use('/api/orders', ordersRoutes);
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date() });
+});
+
+// Fallback to frontend app for non-API GET requests
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api') || req.path === '/health') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 // Socket.io connection

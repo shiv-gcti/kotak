@@ -1,0 +1,37 @@
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; margin:0; color:#111; background:#f7fafc; }
+header { background:#0b5; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+header h1 { margin:0; font-size:20px }
+nav { display:flex; flex-wrap:wrap; gap:12px; }
+nav a { color:#004d00; text-decoration:none; font-weight:700; padding:8px 10px; border-radius:6px; background:rgba(255,255,255,0.2); }
+nav a:hover { background:rgba(255,255,255,0.35); }
+main { padding:24px; }
+.panel { display:none; }
+.panel.active { display:block; }
+.panel-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.panel-header h2 { margin:0; font-size:22px; }
+button { background:#0a7; border:none; color:#fff; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:700; }
+button:hover { background:#089; }
+.summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; margin-bottom:16px; }
+.summary-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px; box-shadow:0 1px 4px rgba(15,23,42,0.08); }
+.summary-card span { display:block; color:#4b5563; margin-bottom:6px; }
+.summary-card strong { font-size:28px; color:#111827; }
+.status-box { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; margin-bottom:20px; color:#1f2937; }
+.panel-subtitle { margin-bottom:12px; font-size:16px; color:#374151; }
+.table-wrapper { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+thead { background:#e6fffa; }
+th, td { padding:14px 12px; text-align:left; border-bottom:1px solid #e5e7eb; font-size:14px; }
+th { color:#0f766e; font-weight:700; }
+tbody tr:hover { background:#f8fafc; }
+.badge { display:inline-flex; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+.badge.target { background:#d1fae5; color:#065f46; }
+.badge.stoploss { background:#fee2e2; color:#991b1b; }
+.badge.watching { background:#e0f2fe; color:#0369a1; }
+.empty-state { background:#fff; border:1px dashed #cbd5e1; padding:20px; border-radius:12px; color:#475569; }
+footer { padding:14px 24px; font-size:12px; color:#475569; }
+@media (max-width: 640px) {
+  header { padding:14px 16px; }
+  main { padding:16px; }
+  th, td { padding:12px 10px; }
+}

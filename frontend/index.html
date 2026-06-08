@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kotak Neo - Static Frontend</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Kotak Neo — Dashboard</h1>
+    <nav>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#trades">Trades</a>
+      <a href="#settings">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="dashboard" class="panel active">
+      <div class="panel-header">
+        <h2>Live Dashboard</h2>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+      <div id="dashboard-summary" class="summary-grid">
+        <div class="summary-card"><span>Total Trades</span><strong id="summary-total">—</strong></div>
+        <div class="summary-card"><span>Open Trades</span><strong id="summary-open">—</strong></div>
+        <div class="summary-card"><span>Closed Trades</span><strong id="summary-closed">—</strong></div>
+        <div class="summary-card"><span>Win Rate</span><strong id="summary-winrate">—</strong></div>
+      </div>
+      <div id="dashboard-status" class="status-box">Loading current prices...</div>
+      <div class="panel-subtitle">Active trade watch</div>
+      <div id="dashboard-trades">Loading trades...</div>
+    </section>
+
+    <section id="trades" class="panel">
+      <div class="panel-header">
+        <h2>Active Trades</h2>
+      </div>
+      <div id="trades-list">No trades yet.</div>
+    </section>
+
+    <section id="settings" class="panel">
+      <h2>Settings</h2>
+      <div id="settings-area">Static settings page.</div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Static frontend — replace or extend as needed.</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
