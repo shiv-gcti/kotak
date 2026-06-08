@@ -28,7 +28,7 @@ class SquareoffService {
 
       const monitoringInterval = setInterval(async () => {
         await this.checkTargetAndStoploss(tradeId);
-      }, parseInt(process.env.SQUAREOFF_CHECK_INTERVAL || 10000));
+      }, parseInt(process.env.SQUAREOFF_CHECK_INTERVAL || 10000, 10));
 
       this.activeMonitoring.set(tradeId, monitoringInterval);
     } catch (error) {
@@ -58,11 +58,9 @@ class SquareoffService {
         return;
       }
 
-      // Get current LTP
       const currentLTP = await kotakNeoAPI.getLTP(trade.symbol);
       if (!currentLTP) return;
 
-      // Update LTP and P&L
       await orderService.updateLTPAndPnL(tradeId, currentLTP);
 
       const isTargetHit = this.checkTarget(trade, currentLTP);
@@ -106,15 +104,14 @@ class SquareoffService {
    * Execute squareoff order
    */
   async executeSquareoff(tradeId, squareoffPrice, reason) {
+    let connection;
     try {
       const trade = await orderService.getTradeById(tradeId);
       if (!trade) return;
 
-      // Determine opposite side
       const oppositeSide = trade.signal_type === 'BUY' ? 'SELL' : 'BUY';
 
-      // Place squareoff order
-      const squareoffResult = await kotakNeoAPI.placeOrder({
+      await kotakNeoAPI.placeOrder({
         symbol: trade.symbol,
         quantity: trade.quantity,
         side: oppositeSide,
@@ -123,37 +120,31 @@ class SquareoffService {
         remarks: `Squareoff-${tradeId}-${reason}`,
       });
 
-      // Update trade
       const multiplier = trade.signal_type === 'BUY' ? 1 : -1;
-      const finalPnL = (squareoffPrice - trade.entry_price) * trade.quantity * multiplier;
-      const finalPnLPercentage = ((finalPnL / (trade.entry_price * trade.quantity)) * 100).toFixed(2);
+      const finalPnL = (squareoffPrice - parseFloat(trade.entry_price)) * trade.quantity * multiplier;
+      const finalPnLPercentage = ((finalPnL / (parseFloat(trade.entry_price) * trade.quantity)) * 100).toFixed(2);
 
-      const connection = await pool.getConnection();
+      connection = await pool.connect();
 
       await connection.query(
-        `UPDATE trades SET 
-          squareoff_status = 'EXECUTED', 
-          squareoff_price = ?, 
-          exit_time = ?,
-          pnl = ?,
-          pnl_percentage = ?
-         WHERE id = ?`,
+        `UPDATE trades SET
+          squareoff_status = 'EXECUTED',
+          squareoff_price = $1,
+          exit_time = $2,
+          pnl = $3,
+          pnl_percentage = $4
+         WHERE id = $5`,
         [squareoffPrice, new Date(), finalPnL.toFixed(2), finalPnLPercentage, tradeId]
       );
 
-      // Log squareoff
       await connection.query(
         `INSERT INTO squareoff_logs (trade_id, symbol, squareoff_price, final_pnl, final_pnl_percentage, reason)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [tradeId, trade.symbol, squareoffPrice, finalPnL.toFixed(2), finalPnLPercentage, reason]
       );
 
-      connection.release();
-
-      // Stop monitoring
       this.stopMonitoring(tradeId);
 
-      // Emit real-time update
       if (global.io) {
         global.io.emit('trade_closed', {
           tradeId,
@@ -169,6 +160,8 @@ class SquareoffService {
       console.log(`✓ Squareoff executed for trade ${tradeId}: P&L = ${finalPnL.toFixed(2)}`);
     } catch (error) {
       console.error(`✗ Error executing squareoff for trade ${tradeId}:`, error.message);
+    } finally {
+      if (connection) connection.release();
     }
   }
 

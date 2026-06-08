@@ -9,26 +9,22 @@ const { formatCurrency, formatPercentage, formatTimestamp } = require('../utils/
  * Get all trades with pagination
  */
 router.get('/', async (req, res) => {
+  let connection;
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
     const offset = (page - 1) * limit;
 
-    const connection = await pool.getConnection();
+    connection = await pool.connect();
 
-    const [trades] = await connection.query(
-      `SELECT * FROM trades ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    const tradesResult = await connection.query(
+      `SELECT * FROM trades ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
 
-    const [countResult] = await connection.query(
-      `SELECT COUNT(*) as total FROM trades`
-    );
+    const countResult = await connection.query(`SELECT COUNT(*) as total FROM trades`);
 
-    connection.release();
-
-    // Format response
-    const formattedTrades = trades.map((trade) => ({
+    const formattedTrades = tradesResult.rows.map((trade) => ({
       ...trade,
       entryPrice: formatCurrency(trade.entry_price),
       targetPrice: formatCurrency(trade.target_price),
@@ -46,65 +42,14 @@ router.get('/', async (req, res) => {
       pagination: {
         page,
         limit,
-        total: countResult[0].total,
-        pages: Math.ceil(countResult[0].total / limit),
+        total: parseInt(countResult.rows[0].total, 10),
+        pages: Math.ceil(parseInt(countResult.rows[0].total, 10) / limit),
       },
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * GET /api/trades/:id
- * Get single trade details
- */
-router.get('/:id', async (req, res) => {
-  try {
-    const tradeId = req.params.id;
-    const connection = await pool.getConnection();
-
-    const [trades] = await connection.query(
-      `SELECT * FROM trades WHERE id = ?`,
-      [tradeId]
-    );
-
-    if (trades.length === 0) {
-      connection.release();
-      return res.status(404).json({ success: false, error: 'Trade not found' });
-    }
-
-    const [priceHistory] = await connection.query(
-      `SELECT * FROM price_tracking WHERE trade_id = ? ORDER BY timestamp ASC`,
-      [tradeId]
-    );
-
-    connection.release();
-
-    const trade = trades[0];
-    res.json({
-      success: true,
-      data: {
-        ...trade,
-        entryPrice: formatCurrency(trade.entry_price),
-        targetPrice: formatCurrency(trade.target_price),
-        stopLoss: formatCurrency(trade.stop_loss),
-        ltp: formatCurrency(trade.ltp),
-        pnl: formatCurrency(trade.pnl),
-        pnlPercentage: formatPercentage(trade.pnl_percentage),
-        createdAt: formatTimestamp(trade.created_at),
-        updatedAt: formatTimestamp(trade.updated_at),
-        priceHistory: priceHistory.map((p) => ({
-          ...p,
-          ltp: formatCurrency(p.ltp),
-          pnl: formatCurrency(p.pnl),
-          pnlPercentage: formatPercentage(p.pnl_percentage),
-          timestamp: formatTimestamp(p.timestamp),
-        })),
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -133,15 +78,16 @@ router.get('/active/list', async (req, res) => {
 });
 
 /**
- * GET /api/trades/stats
+ * GET /api/trades/stats/summary
  * Get trading statistics
  */
 router.get('/stats/summary', async (req, res) => {
+  let connection;
   try {
-    const connection = await pool.getConnection();
+    connection = await pool.connect();
 
-    const [stats] = await connection.query(`
-      SELECT 
+    const statsResult = await connection.query(`
+      SELECT
         COUNT(*) as totalTrades,
         SUM(CASE WHEN squareoff_status = 'EXECUTED' THEN 1 ELSE 0 END) as closedTrades,
         SUM(CASE WHEN squareoff_status = 'PENDING' THEN 1 ELSE 0 END) as openTrades,
@@ -154,28 +100,78 @@ router.get('/stats/summary', async (req, res) => {
       FROM trades
     `);
 
-    connection.release();
-
-    const totalTrades = stats[0].totalTrades || 0;
-    const winRate = totalTrades > 0 ? ((stats[0].winningTrades / totalTrades) * 100).toFixed(2) : 0;
+    const stats = statsResult.rows[0];
+    const totalTrades = parseInt(stats.totaltrades, 10) || 0;
+    const winRate = totalTrades > 0 ? ((parseInt(stats.winningtrades, 10) / totalTrades) * 100).toFixed(2) : 0;
 
     res.json({
       success: true,
       data: {
-        totalTrades: stats[0].totalTrades,
-        closedTrades: stats[0].closedTrades,
-        openTrades: stats[0].openTrades,
-        winningTrades: stats[0].winningTrades,
-        losingTrades: stats[0].losingTrades,
+        totalTrades,
+        closedTrades: parseInt(stats.closedtrades, 10) || 0,
+        openTrades: parseInt(stats.opentrades, 10) || 0,
+        winningTrades: parseInt(stats.winningtrades, 10) || 0,
+        losingTrades: parseInt(stats.losingtrades, 10) || 0,
         winRate: `${winRate}%`,
-        totalPnL: formatCurrency(stats[0].totalPnL),
-        avgPnLPercentage: formatPercentage(stats[0].avgPnLPercentage),
-        maxPnL: formatCurrency(stats[0].maxPnL),
-        minPnL: formatCurrency(stats[0].minPnL),
+        totalPnL: formatCurrency(stats.totalpnl),
+        avgPnLPercentage: formatPercentage(stats.avgpnlpercentage),
+        maxPnL: formatCurrency(stats.maxpnl),
+        minPnL: formatCurrency(stats.minpnl),
       },
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+/**
+ * GET /api/trades/:id
+ * Get single trade details
+ */
+router.get('/:id', async (req, res) => {
+  let connection;
+  try {
+    const tradeId = req.params.id;
+    connection = await pool.connect();
+
+    const tradesResult = await connection.query(`SELECT * FROM trades WHERE id = $1`, [tradeId]);
+    if (tradesResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Trade not found' });
+    }
+
+    const priceHistoryResult = await connection.query(
+      `SELECT * FROM price_tracking WHERE trade_id = $1 ORDER BY timestamp ASC`,
+      [tradeId]
+    );
+
+    const trade = tradesResult.rows[0];
+    res.json({
+      success: true,
+      data: {
+        ...trade,
+        entryPrice: formatCurrency(trade.entry_price),
+        targetPrice: formatCurrency(trade.target_price),
+        stopLoss: formatCurrency(trade.stop_loss),
+        ltp: formatCurrency(trade.ltp),
+        pnl: formatCurrency(trade.pnl),
+        pnlPercentage: formatPercentage(trade.pnl_percentage),
+        createdAt: formatTimestamp(trade.created_at),
+        updatedAt: formatTimestamp(trade.updated_at),
+        priceHistory: priceHistoryResult.rows.map((p) => ({
+          ...p,
+          ltp: formatCurrency(p.ltp),
+          pnl: formatCurrency(p.pnl),
+          pnlPercentage: formatPercentage(p.pnl_percentage),
+          timestamp: formatTimestamp(p.timestamp),
+        })),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 

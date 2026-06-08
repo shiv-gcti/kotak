@@ -47,6 +47,12 @@ class KotakNeoAPI {
    */
   async placeOrder(orderData) {
     try {
+      // Test mode: skip external Kotak API calls when SKIP_KOTAK_API is set
+      if (process.env.SKIP_KOTAK_API === 'true') {
+        const fake = { orderId: `TEST-${Date.now()}`, status: 'PLACED' };
+        console.log(`✓ (Test) Order simulated: ${fake.orderId}`);
+        return fake;
+      }
       if (!this.accessToken) {
         await this.authenticate();
       }

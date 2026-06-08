@@ -22,9 +22,38 @@ function validateWebhookSignature(payload, signature, secret) {
 /**
  * Parse TradingView alert message
  */
+function normalizeSignalData(signalData) {
+  const normalized = {
+    symbol: signalData.symbol || signalData.Symbol || signalData.symbol?.toString(),
+    signalType: (signalData.signalType || signalData.signaltype || signalData.side || '').toUpperCase(),
+    quantity: parseInt(signalData.quantity || signalData.Quantity || signalData.qty || 0, 10),
+    entryPrice: parseFloat(signalData.entryPrice || signalData.entryprice || signalData.entry || 0),
+    targetPrice: parseFloat(signalData.targetPrice || signalData.targetprice || signalData.target || 0),
+    stopLoss: parseFloat(signalData.stopLoss || signalData.stoploss || signalData.stop || 0),
+  };
+
+  return {
+    ...normalized,
+    Symbol: normalized.symbol,
+    signaltype: normalized.signalType,
+    side: normalized.signalType,
+    Quantity: normalized.quantity,
+    qty: normalized.quantity,
+    entryprice: normalized.entryPrice,
+    targetprice: normalized.targetPrice,
+    stopprice: normalized.stopLoss,
+    stoploss: normalized.stopLoss,
+  };
+}
+
 function parseTradingViewAlert(messageText) {
+  if (typeof messageText === 'object' && messageText !== null) {
+    return normalizeSignalData(messageText);
+  }
+
   try {
-    return JSON.parse(messageText);
+    const parsed = JSON.parse(messageText);
+    return normalizeSignalData(parsed);
   } catch (error) {
     // If not JSON, try parsing key=value format
     const result = {};
@@ -35,7 +64,7 @@ function parseTradingViewAlert(messageText) {
         result[key.toLowerCase()] = value;
       }
     });
-    return result;
+    return normalizeSignalData(result);
   }
 }
 

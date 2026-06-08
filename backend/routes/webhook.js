@@ -10,48 +10,52 @@ const pool = require('../config/database');
  * Receive signal from TradingView
  */
 router.post('/', async (req, res) => {
+  let connection;
   try {
     const webhookData = req.body;
 
-    // Log webhook
-    const connection = await pool.getConnection();
+    connection = await pool.connect();
     await connection.query(
-      `INSERT INTO webhook_logs (webhook_data, processed) VALUES (?, ?)`,
+      `INSERT INTO webhook_logs (webhook_data, processed) VALUES ($1, $2)`,
       [JSON.stringify(webhookData), false]
     );
-    connection.release();
 
-    // Parse signal
     const signalData = parseTradingViewAlert(webhookData.message || JSON.stringify(webhookData));
 
-    // Validate signal data
-    const validation = validateTradeData(signalData);
+    console.log('Incoming signalData:', signalData);
+
+    const mappedSignal = {
+      symbol: signalData.symbol || signalData.Symbol || (signalData.symbol && signalData.symbol.toString()),
+      signalType: (signalData.signalType || signalData.signaltype || signalData.side || '').toString(),
+      quantity: parseInt(signalData.quantity || signalData.Quantity || signalData.qty || 0, 10),
+      entryPrice: parseFloat(signalData.entryPrice || signalData.entryprice || signalData.entry || 0),
+      targetPrice: parseFloat(signalData.targetPrice || signalData.targetprice || signalData.target || 0),
+      stopLoss: parseFloat(signalData.stopLoss || signalData.stoploss || signalData.stop || 0),
+      signalId: `${Date.now()}-${signalData.symbol || signalData.Symbol || 'signal'}`,
+    };
+
+    // Normalize and ensure types
+    if (mappedSignal.signalType) mappedSignal.signalType = mappedSignal.signalType.toUpperCase();
+
+    console.error('Mapped signal before validation/processSignal:', mappedSignal);
+
+    const validation = validateTradeData(mappedSignal);
     if (!validation.valid) {
       return res.status(400).json({ success: false, error: validation.error });
     }
 
-    // Process signal
-    const result = await orderService.processSignal({
-      symbol: signalData.symbol,
-      signalType: signalData.signaltype || signalData.side,
-      quantity: parseInt(signalData.quantity),
-      entryPrice: parseFloat(signalData.entryprice),
-      targetPrice: parseFloat(signalData.targetprice),
-      stopLoss: parseFloat(signalData.stoploss),
-      signalId: `${Date.now()}-${signalData.symbol}`,
-    });
+    const result = await orderService.processSignal(mappedSignal);
 
-    if (result.success) {
-      // Start monitoring squareoff
-      if (result.tradeId) {
-        squareoffService.startMonitoring(result.tradeId);
-      }
+    if (result.success && result.tradeId) {
+      squareoffService.startMonitoring(result.tradeId);
     }
 
     res.json(result);
   } catch (error) {
-    console.error('✗ Webhook error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('✗ Webhook error:', error);
+    res.status(500).json({ success: false, error: error.message || String(error) });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -60,22 +64,24 @@ router.post('/', async (req, res) => {
  * Check webhook processing status
  */
 router.get('/status', async (req, res) => {
+  let connection;
   try {
-    const connection = await pool.getConnection();
-    const [logs] = await connection.query(
-      `SELECT COUNT(*) as total, SUM(IF(processed=1, 1, 0)) as processed 
-       FROM webhook_logs WHERE created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)`
+    connection = await pool.connect();
+    const logsResult = await connection.query(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN processed THEN 1 ELSE 0 END) as processed
+       FROM webhook_logs WHERE created_at > NOW() - INTERVAL '1 day'`
     );
-    connection.release();
 
     const monitoringStatus = squareoffService.getMonitoringStatus();
 
     res.json({
-      webhookStats: logs[0],
+      webhookStats: logsResult.rows[0],
       monitoring: monitoringStatus,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
