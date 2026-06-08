@@ -20,7 +20,12 @@ const io = socketIo(server, {
 });
 
 // Middleware
-app.use(morgan('combined'));
+app.use(morgan('combined', {
+  skip: (req) => {
+    const ua = req.headers['user-agent'] || '';
+    return /mozilla|chrome|firefox|safari/i.test(ua);
+  },
+}));
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5000'],
   methods: ['GET', 'POST'],
