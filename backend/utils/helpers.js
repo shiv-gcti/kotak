@@ -131,7 +131,7 @@ function sleep(ms) {
  * Validate trade data
  */
 function validateTradeData(data) {
-  const required = ['symbol', 'signalType', 'quantity', 'entryPrice'];
+  const required = ['symbol', 'signalType', 'quantity'];
   const missing = required.filter((field) => !data[field] && data[field] !== 0);
 
   if (missing.length > 0) {
@@ -142,8 +142,9 @@ function validateTradeData(data) {
     return { valid: false, error: 'Quantity must be greater than 0' };
   }
 
-  if (data.entryPrice <= 0) {
-    return { valid: false, error: 'Entry price must be greater than 0' };
+  const orderType = (data.orderType || 'MARKET').toString().toUpperCase();
+  if (orderType !== 'MARKET' && (!data.entryPrice || data.entryPrice <= 0)) {
+    return { valid: false, error: 'Entry price must be greater than 0 for non-market orders' };
   }
 
   const hasTargetAndStopLoss = data.targetPrice > 0 && data.stopLoss > 0;

@@ -34,6 +34,11 @@ router.post('/', async (req, res) => {
       entryPrice: parseFloat(signalData.entryPrice || signalData.entryprice || signalData.entry || 0),
       targetPrice: parseFloat(signalData.targetPrice || signalData.targetprice || signalData.target || 0),
       stopLoss: parseFloat(signalData.stopLoss || signalData.stoploss || signalData.stop || 0),
+      orderType: (signalData.orderType || signalData.OT || 'MARKET').toString().toUpperCase(),
+      productType: signalData.productType || signalData.P || signalData.p || '',
+      exchange: signalData.exchange || signalData.E || signalData.e || '',
+      validity: signalData.validity || signalData.VL || signalData.vl || '',
+      accessType: signalData.accessType || signalData.AT || signalData.at || '',
       signalId: `${Date.now()}-${signalData.symbol || signalData.Symbol || 'signal'}`,
     };
 

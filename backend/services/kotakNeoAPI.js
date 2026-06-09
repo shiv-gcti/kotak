@@ -3,7 +3,7 @@ require('dotenv').config();
 
 class KotakNeoAPI {
   constructor() {
-    this.baseURL = process.env.KOTAK_BASE_URL || 'https://api.kotakneosecurities.com';
+    this.baseURL = process.env.KOTAK_BASE_URL || 'https://api.kotaksecurities.com';
     this.apiKey = process.env.KOTAK_API_KEY;
     this.apiSecret = process.env.KOTAK_API_SECRET;
     this.accessToken = null;
