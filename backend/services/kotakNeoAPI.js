@@ -3,14 +3,14 @@ require('dotenv').config();
 
 class KotakNeoAPI {
   constructor() {
-    this.baseURL = process.env.KOTAK_BASE_URL || 'https://api.kotaksecurities.com';
+    this.baseURL = process.env.KOTAK_BASE_URL || null;
     this.apiKey = process.env.KOTAK_API_KEY;
     this.apiSecret = process.env.KOTAK_API_SECRET;
     this.accessToken = null;
     this.sessionId = null;
 
     if (!this.baseURL) {
-      console.error('✗ Kotak Neo base URL is not configured. Set KOTAK_BASE_URL in .env');
+      console.error('✗ Kotak Neo base URL is not configured. Set KOTAK_BASE_URL in backend/.env to your broker API endpoint.');
     }
     if (!this.apiKey) {
       console.log('ℹ️ Kotak Neo API key is not set. Continuing with username/password or access token authentication.');
@@ -46,6 +46,10 @@ class KotakNeoAPI {
         headers['Authorization'] = `Bearer ${this.apiKey}`;
       }
 
+      if (!this.baseURL) {
+        throw new Error('Kotak Neo base URL is missing. Set KOTAK_BASE_URL in backend/.env.');
+      }
+
       const response = await axios.post(
         `${this.baseURL}/auth/login`,
         payload,
@@ -74,6 +78,9 @@ class KotakNeoAPI {
         const fake = { orderId: `TEST-${Date.now()}`, status: 'PLACED' };
         console.log(`✓ (Test) Order simulated: ${fake.orderId}`);
         return fake;
+      }
+      if (!this.baseURL) {
+        throw new Error('Kotak Neo base URL is missing. Set KOTAK_BASE_URL in backend/.env.');
       }
       if (!this.accessToken) {
         await this.authenticate();
