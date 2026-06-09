@@ -45,7 +45,7 @@ router.post('/', async (req, res) => {
     // Normalize and ensure types
     if (mappedSignal.signalType) mappedSignal.signalType = mappedSignal.signalType.toUpperCase();
 
-    if ((!mappedSignal.entryPrice || mappedSignal.entryPrice <= 0) && mappedSignal.symbol) {
+    if ((!mappedSignal.entryPrice || mappedSignal.entryPrice <= 0) && mappedSignal.symbol && mappedSignal.orderType !== 'MARKET') {
       const currentLTP = await kotakNeoAPI.getLTP(mappedSignal.symbol);
       if (currentLTP && currentLTP > 0) {
         mappedSignal.entryPrice = parseFloat(currentLTP);

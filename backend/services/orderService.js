@@ -38,7 +38,9 @@ class OrderService {
         symbol,
         quantity,
         side: signalType,
-        orderType: 'MARKET',
+        orderType: signalData.orderType || 'MARKET',
+        productType: signalData.productType || 'MIS',
+        exchange: signalData.exchange || 'NSE',
         remarks: `Signal-${signalId}`,
       };
       if (entryPrice && entryPrice > 0) {

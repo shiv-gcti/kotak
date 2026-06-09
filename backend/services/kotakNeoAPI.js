@@ -4,64 +4,85 @@ require('dotenv').config();
 class KotakNeoAPI {
   constructor() {
     this.baseURL = process.env.KOTAK_BASE_URL || null;
-    this.apiKey = process.env.KOTAK_API_KEY;
-    this.apiSecret = process.env.KOTAK_API_SECRET;
-    this.accessToken = null;
-    this.sessionId = null;
+    this.accessToken = process.env.KOTAK_ACCESS_TOKEN || process.env.KOTAK_NEO_ACCESS_TOKEN || null;
+    this.sid = process.env.KOTAK_SESSION_ID || null;
+    this.mobile = process.env.KOTAK_MOBILE || null;
+    this.ucc = process.env.KOTAK_UCC || null;
+    this.mpin = process.env.KOTAK_MPIN || null;
+    this.totpSecret = process.env.KOTAK_TOTP_SECRET || null;
+    this.sessionToken = this.accessToken;
+    this.apiBaseUrl = process.env.KOTAK_API_BASE_URL || this.baseURL;
 
     if (!this.baseURL) {
       console.error('✗ Kotak Neo base URL is not configured. Set KOTAK_BASE_URL in backend/.env to your broker API endpoint.');
-    }
-    if (!this.apiKey) {
-      console.log('ℹ️ Kotak Neo API key is not set. Continuing with username/password or access token authentication.');
     }
   }
 
   /**
    * Authenticate with Kotak Neo API
    */
-  async authenticate(twoFactorCode = null) {
+  async authenticate(totpCode = null) {
     try {
-      if (process.env.KOTAK_ACCESS_TOKEN) {
-        this.accessToken = process.env.KOTAK_ACCESS_TOKEN;
-        this.sessionId = process.env.KOTAK_SESSION_ID || null;
-        console.log('✓ Using existing Kotak access token from environment');
-        return { accessToken: this.accessToken, sessionId: this.sessionId };
-      }
-
-      if (!process.env.KOTAK_USERNAME || !process.env.KOTAK_PASSWORD) {
-        throw new Error('Missing Kotak credentials: set KOTAK_USERNAME and KOTAK_PASSWORD in .env');
-      }
-
-      const payload = {
-        userId: process.env.KOTAK_USERNAME,
-        password: process.env.KOTAK_PASSWORD,
-        twoFactorCode: twoFactorCode || process.env.KOTAK_TWO_FA || process.env.KOTAK_ACCESS_CODE,
-      };
-
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      if (this.apiKey) {
-        headers['Authorization'] = `Bearer ${this.apiKey}`;
-      }
-
       if (!this.baseURL) {
         throw new Error('Kotak Neo base URL is missing. Set KOTAK_BASE_URL in backend/.env.');
       }
 
+      if (this.sessionToken) {
+        console.log('✓ Using existing Kotak access token from environment');
+        return {
+          sessionToken: this.sessionToken,
+          sid: this.sid,
+          apiBaseUrl: this.apiBaseUrl,
+        };
+      }
+
+      if (!this.mobile || !this.ucc || !this.mpin) {
+        throw new Error('Missing Kotak login configuration: set KOTAK_MOBILE, KOTAK_UCC, and KOTAK_MPIN in backend/.env');
+      }
+
+      if (!totpCode && !this.totpSecret) {
+        throw new Error('Missing TOTP code. Provide totpCode to /api/kotak/login or set KOTAK_TOTP_SECRET in backend/.env');
+      }
+
+      const authPayload = {
+        userId: this.mobile,
+        password: this.mpin,
+        oneTimePassword: totpCode || undefined,
+        authType: 'TOTP',
+        clientName: process.env.CLIENT_NAME || 'Kotak Neo Client',
+      };
+
+      const headers = {
+        Accept: 'application/json',
+        NeoFinKey: 'neotradeapi',
+      };
+      if (this.accessToken) {
+        headers.Authorization = this.accessToken;
+      }
+
       const response = await axios.post(
-        `${this.baseURL}/auth/login`,
-        payload,
+        `${this.baseURL}/login/1.0/tradeApiLogin`,
+        authPayload,
         {
           headers,
         }
       );
 
-      this.accessToken = response.data.accessToken;
-      this.sessionId = response.data.sessionId;
+      const loginResult = response.data?.result || response.data;
+      this.sessionToken = loginResult?.token || loginResult?.sessionToken || null;
+      this.sid = loginResult?.sid || this.sid;
+      this.apiBaseUrl = loginResult?.baseUrl || this.apiBaseUrl;
+
+      if (!this.sessionToken) {
+        throw new Error('Kotak login did not return a session token');
+      }
+
       console.log('✓ Kotak Neo authentication successful');
-      return { accessToken: this.accessToken, sessionId: this.sessionId };
+      return {
+        sessionToken: this.sessionToken,
+        sid: this.sid,
+        apiBaseUrl: this.apiBaseUrl,
+      };
     } catch (error) {
       console.error('✗ Kotak Neo authentication failed:', error.response?.data || error.message);
       throw error;
@@ -79,38 +100,52 @@ class KotakNeoAPI {
         console.log(`✓ (Test) Order simulated: ${fake.orderId}`);
         return fake;
       }
+
       if (!this.baseURL) {
         throw new Error('Kotak Neo base URL is missing. Set KOTAK_BASE_URL in backend/.env.');
       }
-      if (!this.accessToken) {
+
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
-      const payload = {
+      const agoraBaseUrl = this.apiBaseUrl || this.baseURL;
+      const jData = {
         symbol: orderData.symbol,
         quantity: orderData.quantity,
-        orderType: orderData.orderType || 'MARKET',
+        ordertype: (orderData.orderType || 'MARKET').toUpperCase(),
         price: orderData.price || 0,
-        pricetype: orderData.priceType || 'MKT',
-        productType: orderData.productType || 'MIS',
-        side: orderData.side.toUpperCase(), // BUY or SELL
-        triggerPrice: orderData.triggerPrice || 0,
-        exchange: 'NSE',
+        triggerprice: orderData.triggerPrice || 0,
+        producttype: orderData.productType || 'MIS',
+        exchange: orderData.exchange || 'NSE',
+        profileid: `${this.ucc || ''}_${this.mobile || ''}`,
+        transactiontype: orderData.side.toUpperCase(),
+        orderaction: orderData.side.toUpperCase(),
+        token: this.sessionToken,
+        symboltoken: orderData.symbolToken || '',
         remarks: orderData.remarks || `Auto Order - ${Date.now()}`,
       };
 
+      const body = new URLSearchParams({
+        jData: JSON.stringify(jData),
+        jKey: this.sessionToken,
+      });
+
       const response = await axios.post(
-        `${this.baseURL}/order/place`,
-        payload,
+        `${agoraBaseUrl}/quick/order/rule/ms/place`,
+        body.toString(),
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
         }
       );
 
-      console.log(`✓ Order placed on Kotak Neo: ${response.data.orderId}`);
+      console.log(`✓ Kotak order request successful for ${orderData.symbol}`);
       return response.data;
     } catch (error) {
       console.error('✗ Failed to place order:', error.response?.data || error.message);
@@ -123,15 +158,18 @@ class KotakNeoAPI {
    */
   async getOrderStatus(orderId) {
     try {
-      if (!this.accessToken) {
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
+      const statusBaseUrl = this.apiBaseUrl || this.baseURL;
       const response = await axios.get(
-        `${this.baseURL}/order/${orderId}`,
+        `${statusBaseUrl}/order/${orderId}`,
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
           },
         }
       );
@@ -148,15 +186,18 @@ class KotakNeoAPI {
    */
   async getOrders() {
     try {
-      if (!this.accessToken) {
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
+      const ordersBaseUrl = this.apiBaseUrl || this.baseURL;
       const response = await axios.get(
-        `${this.baseURL}/orders`,
+        `${ordersBaseUrl}/orders`,
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
           },
         }
       );
@@ -173,16 +214,19 @@ class KotakNeoAPI {
    */
   async cancelOrder(orderId) {
     try {
-      if (!this.accessToken) {
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
+      const cancelBaseUrl = this.apiBaseUrl || this.baseURL;
       const response = await axios.post(
-        `${this.baseURL}/order/${orderId}/cancel`,
+        `${cancelBaseUrl}/order/${orderId}/cancel`,
         {},
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
             'Content-Type': 'application/json',
           },
         }
@@ -201,22 +245,31 @@ class KotakNeoAPI {
    */
   async getLTP(symbol) {
     try {
-      if (!this.accessToken) {
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
+      const ltpBaseUrl = this.apiBaseUrl || this.baseURL;
+      if (!ltpBaseUrl) {
+        throw new Error('Kotak Neo API base URL is not configured for LTP lookup.');
+      }
+
       const response = await axios.get(
-        `${this.baseURL}/quote/${symbol}`,
+        `${ltpBaseUrl}/marketwatch/getLTP`,
         {
+          params: { symbol },
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            Accept: 'application/json',
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
           },
         }
       );
 
-      return response.data.ltp || 0;
+      return response.data?.ltp || null;
     } catch (error) {
-      console.error(`✗ Failed to get LTP for ${symbol}:`, error.message);
+      console.error(`✗ Failed to get LTP for ${symbol}:`, error.response?.data || error.message);
       return null;
     }
   }
@@ -226,15 +279,18 @@ class KotakNeoAPI {
    */
   async getHoldings() {
     try {
-      if (!this.accessToken) {
+      if (!this.sessionToken) {
         await this.authenticate();
       }
 
+      const holdingsBaseUrl = this.apiBaseUrl || this.baseURL;
       const response = await axios.get(
-        `${this.baseURL}/holdings`,
+        `${holdingsBaseUrl}/holdings`,
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            Authorization: this.sessionToken,
+            Sid: this.sid || '',
+            NeoFinKey: 'neotradeapi',
           },
         }
       );

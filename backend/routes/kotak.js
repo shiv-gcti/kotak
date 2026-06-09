@@ -9,25 +9,29 @@ const kotakNeoAPI = require('../services/kotakNeoAPI');
  */
 router.post('/login', async (req, res) => {
   const { totpCode } = req.body;
-  if (!totpCode) {
-    return res.status(400).json({ success: false, error: 'Missing required field: totpCode' });
+  if (!totpCode && !process.env.KOTAK_ACCESS_TOKEN && !process.env.KOTAK_NEO_ACCESS_TOKEN) {
+    return res.status(400).json({ success: false, error: 'Missing required field: totpCode or set KOTAK_ACCESS_TOKEN/KOTAK_NEO_ACCESS_TOKEN in backend/.env' });
   }
 
   let connection;
   try {
     const authResult = await kotakNeoAPI.authenticate(totpCode);
 
-    connection = await pool.connect();
-    const insertResult = await connection.query(
-      `INSERT INTO kotak_access_codes (access_code) VALUES ($1) RETURNING id, access_code, created_at`,
-      [totpCode]
-    );
+    let savedCode = null;
+    if (totpCode) {
+      connection = await pool.connect();
+      const insertResult = await connection.query(
+        `INSERT INTO kotak_access_codes (access_code) VALUES ($1) RETURNING id, access_code, created_at`,
+        [totpCode]
+      );
+      savedCode = insertResult.rows[0];
+    }
 
     res.json({
       success: true,
-      message: 'TOTP code stored and Kotak login attempted',
+      message: 'Kotak login attempted',
       auth: authResult,
-      totpCode: insertResult.rows[0],
+      totpCode: savedCode,
     });
   } catch (error) {
     console.error('✗ Kotak login error:', error.message);
