@@ -82,6 +82,9 @@ class SquareoffService {
    * Check if target is hit
    */
   checkTarget(trade, currentLTP) {
+    if (!trade.target_price || trade.target_price <= 0) {
+      return false;
+    }
     if (trade.signal_type === 'BUY') {
       return currentLTP >= trade.target_price;
     } else {
@@ -93,6 +96,9 @@ class SquareoffService {
    * Check if stoploss is hit
    */
   checkStoploss(trade, currentLTP) {
+    if (!trade.stop_loss || trade.stop_loss <= 0) {
+      return false;
+    }
     if (trade.signal_type === 'BUY') {
       return currentLTP <= trade.stop_loss;
     } else {

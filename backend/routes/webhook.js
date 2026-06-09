@@ -3,6 +3,7 @@ const router = express.Router();
 const orderService = require('../services/orderService');
 const squareoffService = require('../services/squareoffService');
 const { validateTradeData, parseTradingViewAlert } = require('../utils/helpers');
+const kotakNeoAPI = require('../services/kotakNeoAPI');
 const pool = require('../config/database');
 
 /**
@@ -39,6 +40,14 @@ router.post('/', async (req, res) => {
     // Normalize and ensure types
     if (mappedSignal.signalType) mappedSignal.signalType = mappedSignal.signalType.toUpperCase();
 
+    if ((!mappedSignal.entryPrice || mappedSignal.entryPrice <= 0) && mappedSignal.symbol) {
+      const currentLTP = await kotakNeoAPI.getLTP(mappedSignal.symbol);
+      if (currentLTP && currentLTP > 0) {
+        mappedSignal.entryPrice = parseFloat(currentLTP);
+        console.log(`✓ Filled missing entryPrice from LTP for ${mappedSignal.symbol}: ${mappedSignal.entryPrice}`);
+      }
+    }
+
     console.error('Mapped signal before validation/processSignal:', mappedSignal);
 
     const validation = validateTradeData(mappedSignal);
@@ -48,7 +57,7 @@ router.post('/', async (req, res) => {
 
     const result = await orderService.processSignal(mappedSignal);
 
-    if (result.success && result.tradeId) {
+    if (result.success && result.tradeId && mappedSignal.targetPrice > 0 && mappedSignal.stopLoss > 0) {
       squareoffService.startMonitoring(result.tradeId);
     }
 

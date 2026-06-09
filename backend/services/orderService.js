@@ -34,14 +34,18 @@ class OrderService {
       }
 
       // Place order on Kotak Neo
-      const orderResult = await kotakNeoAPI.placeOrder({
+      const orderPayload = {
         symbol,
         quantity,
         side: signalType,
-        price: entryPrice,
         orderType: 'MARKET',
         remarks: `Signal-${signalId}`,
-      });
+      };
+      if (entryPrice && entryPrice > 0) {
+        orderPayload.price = entryPrice;
+      }
+
+      const orderResult = await kotakNeoAPI.placeOrder(orderPayload);
 
       // Save trade to database
       const tradeId = await this.saveTrade({

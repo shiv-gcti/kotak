@@ -24,12 +24,17 @@ function validateWebhookSignature(payload, signature, secret) {
  */
 function normalizeSignalData(signalData) {
   const normalized = {
-    symbol: signalData.symbol || signalData.Symbol || signalData.symbol?.toString(),
-    signalType: (signalData.signalType || signalData.signaltype || signalData.side || '').toUpperCase(),
-    quantity: parseInt(signalData.quantity || signalData.Quantity || signalData.qty || 0, 10),
-    entryPrice: parseFloat(signalData.entryPrice || signalData.entryprice || signalData.entry || 0),
-    targetPrice: parseFloat(signalData.targetPrice || signalData.targetprice || signalData.target || 0),
-    stopLoss: parseFloat(signalData.stopLoss || signalData.stoploss || signalData.stop || 0),
+    symbol: signalData.symbol || signalData.Symbol || signalData.ts || signalData.TS || signalData.sym || signalData.SYMBOL || signalData.instrument || signalData.s,
+    signalType: (signalData.signalType || signalData.signaltype || signalData.side || signalData.tt || signalData.TT || signalData.tradeType || signalData.action || '').toUpperCase(),
+    quantity: parseInt(signalData.quantity || signalData.Quantity || signalData.qty || signalData.Q || signalData.q || 0, 10),
+    entryPrice: parseFloat(signalData.entryPrice || signalData.entryprice || signalData.entry || signalData.price || signalData.PRC || 0),
+    targetPrice: parseFloat(signalData.targetPrice || signalData.targetprice || signalData.target || signalData.TARGET || signalData.tgt || 0),
+    stopLoss: parseFloat(signalData.stopLoss || signalData.stoploss || signalData.stop || signalData.SL || signalData.sl || 0),
+    orderType: signalData.orderType || signalData.OT || signalData.ot || signalData.orderType || 'MARKET',
+    productType: signalData.productType || signalData.P || signalData.p || signalData.product || signalData.productType,
+    exchange: signalData.exchange || signalData.E || signalData.e || signalData.market,
+    validity: signalData.validity || signalData.VL || signalData.vl,
+    accessType: signalData.accessType || signalData.AT || signalData.at,
   };
 
   return {
@@ -43,17 +48,26 @@ function normalizeSignalData(signalData) {
     targetprice: normalized.targetPrice,
     stopprice: normalized.stopLoss,
     stoploss: normalized.stopLoss,
+    OT: normalized.orderType,
+    P: normalized.productType,
+    E: normalized.exchange,
+    VL: normalized.validity,
+    AT: normalized.accessType,
   };
 }
 
 function parseTradingViewAlert(messageText) {
+  if (Array.isArray(messageText)) {
+    return normalizeSignalData(messageText[0] || {});
+  }
+
   if (typeof messageText === 'object' && messageText !== null) {
     return normalizeSignalData(messageText);
   }
 
   try {
     const parsed = JSON.parse(messageText);
-    return normalizeSignalData(parsed);
+    return Array.isArray(parsed) ? normalizeSignalData(parsed[0] || {}) : normalizeSignalData(parsed);
   } catch (error) {
     // If not JSON, try parsing key=value format
     const result = {};
@@ -117,8 +131,8 @@ function sleep(ms) {
  * Validate trade data
  */
 function validateTradeData(data) {
-  const required = ['symbol', 'signalType', 'quantity', 'entryPrice', 'targetPrice', 'stopLoss'];
-  const missing = required.filter((field) => !data[field]);
+  const required = ['symbol', 'signalType', 'quantity', 'entryPrice'];
+  const missing = required.filter((field) => !data[field] && data[field] !== 0);
 
   if (missing.length > 0) {
     return { valid: false, error: `Missing required fields: ${missing.join(', ')}` };
@@ -128,17 +142,23 @@ function validateTradeData(data) {
     return { valid: false, error: 'Quantity must be greater than 0' };
   }
 
-  if (data.entryPrice <= 0 || data.targetPrice <= 0 || data.stopLoss <= 0) {
-    return { valid: false, error: 'Prices must be greater than 0' };
+  if (data.entryPrice <= 0) {
+    return { valid: false, error: 'Entry price must be greater than 0' };
   }
 
-  // Validate target and stop loss are on opposite sides
-  const isBuy = data.signalType.toUpperCase() === 'BUY';
-  if (isBuy && data.stopLoss >= data.entryPrice) {
-    return { valid: false, error: 'For BUY, stop loss must be below entry price' };
-  }
-  if (!isBuy && data.stopLoss <= data.entryPrice) {
-    return { valid: false, error: 'For SELL, stop loss must be above entry price' };
+  const hasTargetAndStopLoss = data.targetPrice > 0 && data.stopLoss > 0;
+  if (hasTargetAndStopLoss) {
+    if (data.targetPrice <= 0 || data.stopLoss <= 0) {
+      return { valid: false, error: 'Both targetPrice and stopLoss must be greater than 0 if one is provided' };
+    }
+
+    const isBuy = data.signalType.toUpperCase() === 'BUY';
+    if (isBuy && data.stopLoss >= data.entryPrice) {
+      return { valid: false, error: 'For BUY, stop loss must be below entry price' };
+    }
+    if (!isBuy && data.stopLoss <= data.entryPrice) {
+      return { valid: false, error: 'For SELL, stop loss must be above entry price' };
+    }
   }
 
   return { valid: true };
