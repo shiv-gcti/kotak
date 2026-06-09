@@ -3,32 +3,54 @@ require('dotenv').config();
 
 class KotakNeoAPI {
   constructor() {
-    this.baseURL = process.env.KOTAK_BASE_URL;
+    this.baseURL = process.env.KOTAK_BASE_URL || 'https://api.kotakneosecurities.com';
     this.apiKey = process.env.KOTAK_API_KEY;
     this.apiSecret = process.env.KOTAK_API_SECRET;
     this.accessToken = null;
     this.sessionId = null;
+
+    if (!this.baseURL) {
+      console.error('✗ Kotak Neo base URL is not configured. Set KOTAK_BASE_URL in .env');
+    }
+    if (!this.apiKey) {
+      console.log('ℹ️ Kotak Neo API key is not set. Continuing with username/password or access token authentication.');
+    }
   }
 
   /**
    * Authenticate with Kotak Neo API
    */
-  async authenticate() {
+  async authenticate(twoFactorCode = null) {
     try {
+      if (process.env.KOTAK_ACCESS_TOKEN) {
+        this.accessToken = process.env.KOTAK_ACCESS_TOKEN;
+        this.sessionId = process.env.KOTAK_SESSION_ID || null;
+        console.log('✓ Using existing Kotak access token from environment');
+        return { accessToken: this.accessToken, sessionId: this.sessionId };
+      }
+
+      if (!process.env.KOTAK_USERNAME || !process.env.KOTAK_PASSWORD) {
+        throw new Error('Missing Kotak credentials: set KOTAK_USERNAME and KOTAK_PASSWORD in .env');
+      }
+
       const payload = {
         userId: process.env.KOTAK_USERNAME,
         password: process.env.KOTAK_PASSWORD,
-        twoFactorCode: process.env.KOTAK_TWO_FA,
+        twoFactorCode: twoFactorCode || process.env.KOTAK_TWO_FA || process.env.KOTAK_ACCESS_CODE,
       };
+
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
 
       const response = await axios.post(
         `${this.baseURL}/auth/login`,
         payload,
         {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
+          headers,
         }
       );
 

@@ -29,6 +29,19 @@
         <div class="summary-card"><span>Win Rate</span><strong id="summary-winrate">—</strong></div>
       </div>
       <div id="dashboard-status" class="status-box">Loading current prices...</div>
+
+      <div class="broker-login-card">
+        <div class="panel-header">
+          <h3>Kotak Broker Login</h3>
+        </div>
+        <p>Enter your Kotak TOTP code for manual login and save the login attempt.</p>
+        <div class="input-row">
+          <input id="kotakTotpCodeInput" type="text" placeholder="Enter Kotak TOTP code" />
+          <button id="saveKotakTotpCodeBtn">Login with TOTP</button>
+        </div>
+        <div id="kotakTotpCodeStatus" class="status-box">Last saved code: <strong id="savedTotpCode">—</strong></div>
+      </div>
+
       <div class="panel-subtitle">Active trade watch</div>
       <div id="dashboard-trades">Loading trades...</div>
     </section>

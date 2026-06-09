@@ -140,6 +140,15 @@ async function migrate() {
     console.log('✓ Webhook logs table created');
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS kotak_access_codes (
+        id SERIAL PRIMARY KEY,
+        access_code VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✓ Kotak access codes table created');
+
+    await pool.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
       BEGIN

@@ -79,6 +79,8 @@ async function loadDashboard() {
   statusEl.textContent = 'Loading latest data...';
 
   try {
+    await fetchKotakTotpCode();
+
     const [statsRes, tradesRes] = await Promise.all([
       fetchJson('/api/trades/stats/summary'),
       fetchJson('/api/trades/active/list'),
@@ -111,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const links = document.querySelectorAll('nav a');
   const panels = document.querySelectorAll('.panel');
   const refreshBtn = document.getElementById('refreshBtn');
+  const saveCodeBtn = document.getElementById('saveKotakTotpCodeBtn');
 
   links.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -120,7 +123,58 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  if (saveCodeBtn) {
+    saveCodeBtn.addEventListener('click', () => saveKotakTotpCode());
+  }
+
   refreshBtn.addEventListener('click', () => loadDashboard());
   loadDashboard();
   setInterval(loadDashboard, REFRESH_INTERVAL);
 });
+
+async function fetchKotakTotpCode() {
+  try {
+    const result = await fetchJson('/api/kotak/access-code');
+    const savedCode = document.getElementById('savedTotpCode');
+    if (savedCode) {
+      savedCode.textContent = result.data?.access_code || '—';
+    }
+  } catch (error) {
+    const status = document.getElementById('kotakTotpCodeStatus');
+    if (status) {
+      status.textContent = `Unable to load saved Kotak TOTP login attempt: ${error.message}`;
+    }
+  }
+}
+
+async function saveKotakTotpCode() {
+  const input = document.getElementById('kotakTotpCodeInput');
+  const status = document.getElementById('kotakTotpCodeStatus');
+  if (!input || !status) return;
+
+  const totpCode = input.value.trim();
+  if (!totpCode) {
+    status.textContent = 'Please enter a Kotak TOTP code before submitting.';
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/kotak/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ totpCode }),
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      status.textContent = `Login failed: ${result.error || response.statusText}`;
+      return;
+    }
+
+    document.getElementById('savedTotpCode').textContent = result.totpCode.access_code;
+    status.textContent = 'Kotak TOTP login submitted successfully.';
+    input.value = '';
+  } catch (error) {
+    status.textContent = `Network error submitting TOTP code: ${error.message}`;
+  }
+}

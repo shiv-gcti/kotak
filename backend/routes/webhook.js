@@ -20,8 +20,10 @@ router.post('/', async (req, res) => {
       [JSON.stringify(webhookData), false]
     );
 
-    const signalData = parseTradingViewAlert(webhookData.message || JSON.stringify(webhookData));
+    const rawPayload = webhookData.message ?? webhookData.alert ?? webhookData.payload ?? webhookData.data ?? webhookData;
+    const signalData = parseTradingViewAlert(rawPayload);
 
+    console.log('Received webhookData:', JSON.stringify(webhookData));
     console.log('Incoming signalData:', signalData);
 
     const mappedSignal = {

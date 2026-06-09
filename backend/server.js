@@ -9,6 +9,7 @@ require('dotenv').config();
 const webhookRoutes = require('./routes/webhook');
 const tradesRoutes = require('./routes/trades');
 const ordersRoutes = require('./routes/orders');
+const kotakRoutes = require('./routes/kotak');
 
 const app = express();
 const server = http.createServer(app);
@@ -43,6 +44,7 @@ app.set('io', io);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/trades', tradesRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/kotak', kotakRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
